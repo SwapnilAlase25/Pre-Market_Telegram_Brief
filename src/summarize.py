@@ -12,7 +12,10 @@ TIMEOUT_SECONDS = 15
 
 SYSTEM_PROMPT = (
     "Summarize these headlines in 3-4 bullets, prioritizing anything likely to move "
-    "Indian equity markets today. Do not invent facts not in the headlines. "
+    "Indian equity markets today. Ignore and drop any headline that is not relevant "
+    "to Indian markets, global macro, or major asset classes (e.g. sports, crypto "
+    "trivia, unrelated corporate PR). If none of the headlines are relevant, say "
+    "'No market-moving headlines today.' Do not invent facts not in the headlines. "
     "Do not include numbers not present in the source text."
 )
 
@@ -59,10 +62,17 @@ def summarize_headlines(
             },
             timeout=TIMEOUT_SECONDS,
         )
-        resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"].strip()
+        if not resp.ok:
+            logger.warning("OpenRouter returned %s: %s", resp.status_code, resp.text[:500])
+            return _fallback_bullets(headlines)
+        data = resp.json()
+        if "choices" not in data:
+            logger.warning("OpenRouter response missing 'choices': %s", str(data)[:500])
+            return _fallback_bullets(headlines)
+        content = data["choices"][0]["message"]["content"].strip()
         if not content:
-            raise ValueError("empty response from OpenRouter")
+            logger.warning("OpenRouter returned an empty summary; falling back to raw headlines")
+            return _fallback_bullets(headlines)
         return content
     except Exception as exc:  # noqa: BLE001
         logger.warning("Summarization failed, falling back to raw headlines: %s", exc)

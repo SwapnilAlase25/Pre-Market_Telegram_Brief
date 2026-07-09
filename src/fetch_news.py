@@ -8,7 +8,35 @@ import requests
 logger = logging.getLogger(__name__)
 
 NEWS_API_URL = "https://newsapi.org/v2/everything"
-KEYWORDS = ["Nifty", "Sensex", "RBI", "Fed", "crude oil", "USD INR", "Indian markets"]
+# Quoted phrases so NewsAPI matches them exactly rather than any word in
+# isolation — a bare "Fed" or "crude oil" (unquoted) matches unrelated
+# articles that merely contain "fed" as a verb or "oil" in any context.
+KEYWORDS = [
+    '"Nifty"',
+    '"Sensex"',
+    '"RBI"',
+    '"Federal Reserve"',
+    '"crude oil"',
+    '"USD INR"',
+    '"rupee"',
+    '"Indian stock market"',
+    '"Indian equities"',
+    '"Indian economy"',
+]
+# Restrict to financial/business news sources — cuts out crypto blogs, sports,
+# and generic wire noise that would otherwise match loosely on a keyword.
+DOMAINS = ",".join(
+    [
+        "moneycontrol.com",
+        "economictimes.indiatimes.com",
+        "livemint.com",
+        "business-standard.com",
+        "reuters.com",
+        "cnbctv18.com",
+        "bloombergquint.com",
+        "ndtv.com",
+    ]
+)
 # NewsAPI's free "Developer" plan embargoes very recent articles (roughly the
 # last 24h don't show up yet), so a short lookback window can return zero
 # results even when the key and query are fine. 48h gives a visible band.
@@ -37,6 +65,7 @@ def fetch_news(api_key: str | None = None) -> list[dict]:
             NEWS_API_URL,
             params={
                 "q": query,
+                "domains": DOMAINS,
                 "from": since,
                 "sortBy": "publishedAt",
                 "language": "en",
