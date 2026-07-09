@@ -10,7 +10,7 @@ import sys
 from fetch_indices import fetch_indices
 from fetch_news import fetch_news
 from format_message import format_message
-from send_whatsapp import send_whatsapp_template
+from send_telegram import send_telegram_message
 from summarize import summarize_headlines
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -41,7 +41,7 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         logger.error("Failed to build brief: %s", exc)
         try:
-            send_whatsapp_template("⚠️ Pre-Market Brief failed to generate today. Check GitHub Actions logs.")
+            send_telegram_message("⚠️ Pre-Market Brief failed to generate today. Check GitHub Actions logs.")
         except Exception as send_exc:  # noqa: BLE001
             logger.error("Also failed to send failure notice: %s", send_exc)
         return 1
@@ -49,9 +49,9 @@ def main() -> int:
     logger.info("Built message:\n%s", message)
 
     try:
-        send_whatsapp_template(message)
+        send_telegram_message(message)
     except Exception as exc:  # noqa: BLE001
-        logger.error("Failed to send WhatsApp message: %s", exc)
+        logger.error("Failed to send Telegram message: %s", exc)
         return 1
 
     logger.info("Brief sent successfully.")

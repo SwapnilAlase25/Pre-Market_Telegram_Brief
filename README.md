@@ -1,6 +1,6 @@
-# Pre-Market WhatsApp Brief
+# Pre-Market Brief
 
-Daily automated WhatsApp message delivered ~8:30 AM IST, before the 9:15 AM
+Daily automated Telegram message delivered ~8:30 AM IST, before the 9:15 AM
 market open — Nifty prev close, US/Europe close, live SE Asia morning
 session, and an LLM-summarized news digest.
 
@@ -19,25 +19,28 @@ src/
   fetch_indices.py      # yfinance calls for Nifty, GIFT Nifty, US/Europe/Asia indices
   fetch_news.py          # NewsAPI headlines, India/market relevant
   summarize.py            # OpenRouter call — news only, 3-4 bullets
-  format_message.py       # assembles final WhatsApp text
-  send_whatsapp.py        # Meta WhatsApp Cloud API POST
+  format_message.py       # assembles final message text
+  send_telegram.py        # Telegram Bot API POST
 .github/workflows/daily-brief.yml
 ```
 
 ## Setup
 
-### 1. Meta WhatsApp Business Cloud API
+### 1. Telegram bot
 
-1. Create a Meta Business Manager account and set up WhatsApp Business
-   Cloud API (a test number works for personal use).
-2. Submit a message template named `premarket_brief` for approval, with a
-   single body placeholder, e.g.:
-   ```
-   {{1}}
-   ```
-   Approval can take 1-2 days — start this first.
-3. Note your `WHATSAPP_TOKEN` (permanent access token), `WHATSAPP_PHONE_ID`,
-   and `WHATSAPP_TO_NUMBER` (your number, in international format).
+1. In Telegram, message **@BotFather** → `/newbot` → follow the prompts
+   (choose a name and a username ending in `bot`).
+2. BotFather replies with a token like `123456789:AAExampleTokenHere` —
+   that's `TELEGRAM_BOT_TOKEN`.
+3. Message your new bot directly (search its username, hit Start) so it can
+   message you back — a bot cannot message you until you've messaged it
+   first.
+4. Get your chat ID: visit
+   `https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates` in a
+   browser after sending the bot a message. Look for `"chat":{"id":...}` in
+   the JSON response — that number (can be negative) is `TELEGRAM_CHAT_ID`.
+
+No approval wait, no template — works immediately.
 
 ### 2. OpenRouter
 
@@ -54,14 +57,13 @@ Get a free API key from [NewsAPI.org](https://newsapi.org).
 
 Add these under Settings → Secrets and variables → Actions:
 
-- `WHATSAPP_TOKEN`
-- `WHATSAPP_PHONE_ID`
-- `WHATSAPP_TO_NUMBER`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
 - `OPENROUTER_API_KEY`
 - `NEWS_API_KEY`
 
-Optionally set `OPENROUTER_MODEL` / `WHATSAPP_TEMPLATE_NAME` as repo
-variables or secrets if you need to override the defaults.
+Optionally set `OPENROUTER_MODEL` as a repo variable or secret if you need
+to override the default model.
 
 ## Testing (do in this order)
 
@@ -78,11 +80,11 @@ NEWS_API_KEY=xxx python fetch_news.py
 # 3. Summarization
 OPENROUTER_API_KEY=xxx python summarize.py
 
-# 4. WhatsApp delivery (sends a real test message)
-WHATSAPP_TOKEN=xxx WHATSAPP_PHONE_ID=xxx WHATSAPP_TO_NUMBER=xxx python send_whatsapp.py
+# 4. Telegram delivery (sends a real test message)
+TELEGRAM_BOT_TOKEN=xxx TELEGRAM_CHAT_ID=xxx python send_telegram.py
 
 # 5. Full pipeline, locally
-WHATSAPP_TOKEN=xxx WHATSAPP_PHONE_ID=xxx WHATSAPP_TO_NUMBER=xxx \
+TELEGRAM_BOT_TOKEN=xxx TELEGRAM_CHAT_ID=xxx \
 OPENROUTER_API_KEY=xxx NEWS_API_KEY=xxx python main.py
 ```
 
@@ -96,14 +98,16 @@ Then push, add the GitHub secrets, and trigger the workflow manually via
 - If news fetch or summarization fails, the brief still sends with a
   fallback line instead of blocking delivery.
 - If the whole pipeline fails unexpectedly, `main.py` attempts to send a
-  bare "brief failed" WhatsApp notice and exits non-zero so the GitHub
+  bare "brief failed" Telegram notice and exits non-zero so the GitHub
   Actions run is flagged as failed.
 
 ## Known constraints
 
-- Only the official Meta WhatsApp Cloud API is used — no unofficial
-  libraries (Baileys, whatsapp-web.js).
 - GIFT Nifty has no reliable `yfinance` ticker; `fetch_indices.py` tries a
   couple of fallback symbols and marks it unavailable if all fail.
 - Cron is scheduled a bit earlier than the 8:30 AM IST target to absorb
   GitHub Actions scheduling lag.
+- WhatsApp delivery (via Meta Cloud API) is on hold pending Meta Business
+  verification; Telegram is the interim delivery channel. The pipeline can
+  be re-pointed at WhatsApp later by swapping `send_telegram.py` back for a
+  Meta Cloud API sender in `main.py`.
