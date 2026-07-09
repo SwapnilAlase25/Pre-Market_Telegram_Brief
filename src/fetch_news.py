@@ -9,7 +9,10 @@ logger = logging.getLogger(__name__)
 
 NEWS_API_URL = "https://newsapi.org/v2/everything"
 KEYWORDS = ["Nifty", "Sensex", "RBI", "Fed", "crude oil", "USD INR", "Indian markets"]
-LOOKBACK_HOURS = 16
+# NewsAPI's free "Developer" plan embargoes very recent articles (roughly the
+# last 24h don't show up yet), so a short lookback window can return zero
+# results even when the key and query are fine. 48h gives a visible band.
+LOOKBACK_HOURS = 48
 MAX_HEADLINES = 8
 
 
@@ -42,8 +45,14 @@ def fetch_news(api_key: str | None = None) -> list[dict]:
             },
             timeout=15,
         )
-        resp.raise_for_status()
-        articles = resp.json().get("articles", [])
+        if not resp.ok:
+            logger.warning("News fetch returned %s: %s", resp.status_code, resp.text[:500])
+            return []
+        body = resp.json()
+        articles = body.get("articles", [])
+        if not articles:
+            logger.info("News fetch succeeded but returned 0 articles (status=%s totalResults=%s)",
+                        body.get("status"), body.get("totalResults"))
     except Exception as exc:  # noqa: BLE001
         logger.warning("News fetch failed: %s", exc)
         return []

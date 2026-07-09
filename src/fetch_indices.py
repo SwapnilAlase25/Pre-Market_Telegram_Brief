@@ -1,5 +1,6 @@
 """Fetch index quotes via yfinance. Numeric data only — never touched by the LLM."""
 import logging
+import math
 
 import yfinance as yf
 
@@ -23,12 +24,17 @@ def _fetch_one(symbol: str) -> dict:
     """Return {'price': float, 'change_pct': float} for a single ticker, or raise."""
     ticker = yf.Ticker(symbol)
     hist = ticker.history(period="5d")
+    hist = hist.dropna(subset=["Close"])
     if hist.empty or len(hist) < 2:
         raise ValueError(f"insufficient history for {symbol}")
-    prev_close = hist["Close"].iloc[-2]
-    last_close = hist["Close"].iloc[-1]
+    prev_close = float(hist["Close"].iloc[-2])
+    last_close = float(hist["Close"].iloc[-1])
+    if math.isnan(prev_close) or math.isnan(last_close) or prev_close == 0:
+        raise ValueError(f"invalid close values for {symbol}: prev={prev_close} last={last_close}")
     change_pct = (last_close - prev_close) / prev_close * 100
-    return {"price": round(float(last_close), 2), "change_pct": round(float(change_pct), 2)}
+    if math.isnan(change_pct):
+        raise ValueError(f"computed NaN change_pct for {symbol}")
+    return {"price": round(last_close, 2), "change_pct": round(change_pct, 2)}
 
 
 def fetch_gift_nifty() -> dict:
