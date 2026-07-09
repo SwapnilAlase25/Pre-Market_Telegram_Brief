@@ -1,0 +1,32 @@
+name: Daily Pre-Market Brief
+
+on:
+  schedule:
+    # 8:15 AM IST target (03:00 UTC minus buffer for cron lag) = 02:45 UTC, weekdays only
+    - cron: "45 2 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  send-brief:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pre-market brief
+        working-directory: src
+        env:
+          WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+          WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
+          WHATSAPP_TO_NUMBER: ${{ secrets.WHATSAPP_TO_NUMBER }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+        run: python main.py
