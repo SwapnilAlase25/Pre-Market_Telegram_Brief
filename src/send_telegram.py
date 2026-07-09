@@ -27,6 +27,7 @@ def send_telegram_message(
     payload = {
         "chat_id": chat_id,
         "text": body_text,
+        "parse_mode": "HTML",
         "disable_web_page_preview": True,
     }
 
