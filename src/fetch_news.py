@@ -41,7 +41,25 @@ DOMAINS = ",".join(
 # last 24h don't show up yet), so a short lookback window can return zero
 # results even when the key and query are fine. 48h gives a visible band.
 LOOKBACK_HOURS = 48
-MAX_HEADLINES = 8
+FETCH_COUNT = 12
+MAX_HEADLINES = 5
+
+# NewsAPI's /everything matches keywords anywhere in the article body, so a
+# domain-restricted query can still surface generic personal-finance pieces
+# (e.g. "Starting a SIP?") that happen to mention "Sensex" once in passing.
+# Require the *title itself* to contain a market-moving signal before we
+# treat it as brief-worthy.
+TITLE_SIGNAL_TERMS = [
+    "nifty", "sensex", "rbi", "fed", "rupee", "crude", "oil",
+    "market", "stock", "equit", "ipo", "gdp", "inflation",
+    "earnings", "rally", "selloff", "sell-off", "correction",
+    "bond", "yield", "fii", "dii", "q1", "q2", "q3", "q4",
+]
+
+
+def _title_is_relevant(title: str) -> bool:
+    lowered = title.lower()
+    return any(term in lowered for term in TITLE_SIGNAL_TERMS)
 
 
 def fetch_news(api_key: str | None = None) -> list[dict]:
@@ -69,7 +87,7 @@ def fetch_news(api_key: str | None = None) -> list[dict]:
                 "from": since,
                 "sortBy": "publishedAt",
                 "language": "en",
-                "pageSize": MAX_HEADLINES,
+                "pageSize": FETCH_COUNT,
                 "apiKey": api_key,
             },
             timeout=15,
@@ -87,11 +105,13 @@ def fetch_news(api_key: str | None = None) -> list[dict]:
         return []
 
     headlines = []
-    for article in articles[:MAX_HEADLINES]:
+    for article in articles:
         title = article.get("title")
         source = (article.get("source") or {}).get("name", "unknown")
-        if title:
+        if title and _title_is_relevant(title):
             headlines.append({"title": title, "source": source})
+        if len(headlines) >= MAX_HEADLINES:
+            break
 
     return headlines
 

@@ -3,6 +3,8 @@ the LLM summary only ever fills the news section, never numbers."""
 import html
 from datetime import datetime
 
+from market_bias import compute_bias
+
 NA = "N/A"
 
 FRIENDLY_NAMES = {
@@ -47,8 +49,12 @@ def format_message(indices: dict, failed_tickers: list[str], news_summary: str) 
 
     failed_str = ", ".join(FRIENDLY_NAMES.get(k, k) for k in failed_tickers) or "None"
     safe_news_summary = html.escape(news_summary)
+    bias_label, bias_emoji = compute_bias(indices)
 
     message = f"""<b>📊 Pre-Market Brief — {date_str}, {day_str}</b>
+
+<b>{bias_emoji} Today's Outlook: {bias_label}</b>
+<i>(derived from Asia/US/Europe closes — not a recommendation)</i>
 
 <b>🇮🇳 Indian Markets</b>
 Nifty (prev close): {_fmt_price(indices, 'nifty')} ({_fmt_pct(indices, 'nifty')})

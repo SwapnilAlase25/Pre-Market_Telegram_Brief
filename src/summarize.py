@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "deepseek/deepseek-chat-v3.1:free"
 TIMEOUT_SECONDS = 15
+MAX_FALLBACK_HEADLINES = 4
 
 SYSTEM_PROMPT = (
     "Summarize these headlines in 3-4 bullets, prioritizing anything likely to move "
@@ -24,7 +25,9 @@ def _fallback_bullets(headlines: list[dict]) -> str:
     """Raw headline listing, used if the LLM call fails or headlines are empty."""
     if not headlines:
         return "No market-moving headlines available."
-    return "\n".join(f"- {h['title']} ({h['source']})" for h in headlines)
+    return "\n".join(
+        f"- {h['title']} ({h['source']})" for h in headlines[:MAX_FALLBACK_HEADLINES]
+    )
 
 
 def summarize_headlines(
