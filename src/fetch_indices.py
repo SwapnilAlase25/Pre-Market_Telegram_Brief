@@ -20,8 +20,39 @@ TICKERS = {
 }
 
 
-def _fetch_one(symbol: str) -> dict:
-    """Return {'price': float, 'change_pct': float} for a single ticker, or raise."""
+# A genuine single-day move beyond this for a major index (Nikkei/HSI/Kospi/
+# Dow/etc.) is extraordinarily rare — more likely a stale/misaligned data
+# point (e.g. diffed across a holiday gap) than reality. Flag it as unusable
+# rather than silently displaying a bogus swing.
+MAX_PLAUSIBLE_CHANGE_PCT = 15.0
+
+
+def _from_fast_info(ticker: "yf.Ticker") -> dict | None:
+    """
+    Prefer yfinance's fast_info — Yahoo's own authoritative last-price /
+    previous-close pair — over manually diffing two rows of history(), which
+    is prone to misalignment (holiday gaps, partial intraday rows).
+    Returns None if fast_info doesn't have usable values.
+    """
+    try:
+        info = ticker.fast_info
+        last_price = float(info["last_price"])
+        prev_close = float(info["previous_close"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    if math.isnan(last_price) or math.isnan(prev_close) or prev_close == 0:
+        return None
+
+    change_pct = (last_price - prev_close) / prev_close * 100
+    if math.isnan(change_pct):
+        return None
+
+    return {"price": round(last_price, 2), "change_pct": round(change_pct, 2)}
+
+
+def _from_history(symbol: str) -> dict:
+    """Fallback: diff the last two daily closes from history()."""
     ticker = yf.Ticker(symbol)
     hist = ticker.history(period="5d")
     hist = hist.dropna(subset=["Close"])
@@ -35,6 +66,22 @@ def _fetch_one(symbol: str) -> dict:
     if math.isnan(change_pct):
         raise ValueError(f"computed NaN change_pct for {symbol}")
     return {"price": round(last_close, 2), "change_pct": round(change_pct, 2)}
+
+
+def _fetch_one(symbol: str) -> dict:
+    """Return {'price': float, 'change_pct': float} for a single ticker, or raise."""
+    ticker = yf.Ticker(symbol)
+    result = _from_fast_info(ticker)
+    if result is None:
+        result = _from_history(symbol)
+
+    if abs(result["change_pct"]) > MAX_PLAUSIBLE_CHANGE_PCT:
+        raise ValueError(
+            f"implausible change_pct for {symbol}: {result['change_pct']}% "
+            f"(price={result['price']}) — treating as bad data"
+        )
+
+    return result
 
 
 def fetch_gift_nifty() -> dict:
