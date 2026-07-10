@@ -1,7 +1,10 @@
 """Fetch index quotes via yfinance. Numeric data only — never touched by the LLM."""
+import json
 import logging
 import math
+import re
 
+import requests
 import yfinance as yf
 
 logger = logging.getLogger(__name__)
@@ -84,8 +87,104 @@ def _fetch_one(symbol: str) -> dict:
     return result
 
 
+GIFT_NIFTY_URL = "https://groww.in/indices/global-indices/sgx-nifty"
+GIFT_NIFTY_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml",
+}
+
+# Field names Groww's frontend commonly uses for price/change on their
+# Next.js-rendered pages. Matched case-insensitively.
+PRICE_KEYS = {"ltp", "lastprice", "last_price", "value", "close", "cmp"}
+CHANGE_PCT_KEYS = {
+    "daychangeperc", "changepercentage", "chgpercent",
+    "percentagechange", "change_perc", "pchange", "daychangeperc",
+}
+IDENTITY_KEYS = {"symbol", "name", "title", "displayname", "shortname"}
+IDENTITY_HINTS = ("nifty", "gift", "sgx")
+
+
+def _looks_like_gift_nifty(node: dict) -> bool:
+    """Guard against grabbing a different index's numbers off the same page
+    (it lists multiple global indices) — only trust a match if some
+    identity-ish field on the same object actually mentions nifty/gift/sgx."""
+    for key, value in node.items():
+        if key.lower() in IDENTITY_KEYS and isinstance(value, str):
+            lowered = value.lower()
+            if any(hint in lowered for hint in IDENTITY_HINTS):
+                return True
+    return False
+
+
+def _walk_json_for_gift_nifty_quote(node) -> tuple[float, float] | None:
+    """Recursively search parsed page JSON for a dict that looks like the
+    GIFT Nifty quote (has both a price-like and change%-like field, and an
+    identity field confirming it's actually GIFT/SGX Nifty, not some other
+    index on the same page)."""
+    if isinstance(node, dict):
+        lower_keys = {k.lower(): k for k in node.keys()}
+        price_key = next((lower_keys[k] for k in lower_keys if k in PRICE_KEYS), None)
+        change_key = next((lower_keys[k] for k in lower_keys if k in CHANGE_PCT_KEYS), None)
+        if price_key and change_key and _looks_like_gift_nifty(node):
+            try:
+                return float(node[price_key]), float(node[change_key])
+            except (TypeError, ValueError):
+                pass
+        for value in node.values():
+            result = _walk_json_for_gift_nifty_quote(value)
+            if result:
+                return result
+    elif isinstance(node, list):
+        for item in node:
+            result = _walk_json_for_gift_nifty_quote(item)
+            if result:
+                return result
+    return None
+
+
+def fetch_gift_nifty_scrape() -> dict:
+    """
+    Best-effort scrape of Groww's GIFT/SGX Nifty page. Groww is a Next.js
+    site that embeds its initial data as JSON in a <script id="__NEXT_DATA__">
+    tag server-side, so a plain HTTP GET (no JS execution) can often read it.
+    Deliberately conservative: only trusts a match if it's tagged with an
+    identity field mentioning nifty/gift/sgx, to avoid misattributing some
+    other index's numbers as GIFT Nifty.
+    """
+    resp = requests.get(GIFT_NIFTY_URL, headers=GIFT_NIFTY_HEADERS, timeout=15)
+    resp.raise_for_status()
+
+    match = re.search(
+        r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', resp.text, re.DOTALL
+    )
+    if not match:
+        raise ValueError("__NEXT_DATA__ block not found on Groww GIFT Nifty page")
+
+    data = json.loads(match.group(1))
+    result = _walk_json_for_gift_nifty_quote(data)
+    if not result:
+        raise ValueError("could not locate an identifiable GIFT Nifty quote in page data")
+
+    price, change_pct = result
+    logger.info("GIFT Nifty scrape matched: price=%s change_pct=%s", price, change_pct)
+
+    if abs(change_pct) > MAX_PLAUSIBLE_CHANGE_PCT:
+        raise ValueError(f"implausible GIFT Nifty change_pct: {change_pct}%")
+
+    return {"price": round(price, 2), "change_pct": round(change_pct, 2)}
+
+
 def fetch_gift_nifty() -> dict:
-    """GIFT Nifty has no reliable yfinance ticker; try a couple of fallbacks."""
+    """GIFT Nifty has no reliable yfinance ticker or broker-API coverage;
+    try a page scrape first, then a couple of speculative yfinance tickers."""
+    try:
+        return fetch_gift_nifty_scrape()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("gift_nifty scrape failed: %s", exc)
+
     for symbol in ("NIFTY_F1.NS", "GIFTNIFTY.NS"):
         try:
             return _fetch_one(symbol)
