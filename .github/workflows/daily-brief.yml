@@ -3,6 +3,8 @@ name: Daily Pre-Market Brief
 on:
   schedule:
     # 8:15 AM IST target (03:00 UTC minus buffer for cron lag) = 02:45 UTC, weekdays only
+    # Re-saved after the repo rename to re-register the schedule with GitHub
+    # (renames can leave a previously-registered cron stale).
     - cron: "45 2 * * 1-5"
   workflow_dispatch: {}
 
