@@ -9,15 +9,17 @@ logger = logging.getLogger(__name__)
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "deepseek/deepseek-chat-v3.1:free"
 TIMEOUT_SECONDS = 15
-MAX_FALLBACK_HEADLINES = 4
+MAX_FALLBACK_HEADLINES = 5
 
 SYSTEM_PROMPT = (
-    "Summarize these headlines in 3-4 bullets, prioritizing anything likely to move "
-    "Indian equity markets today. Ignore and drop any headline that is not relevant "
-    "to Indian markets, global macro, or major asset classes (e.g. sports, crypto "
-    "trivia, unrelated corporate PR). If none of the headlines are relevant, say "
-    "'No market-moving headlines today.' Do not invent facts not in the headlines. "
-    "Do not include numbers not present in the source text."
+    "Summarize these headlines in bullets, one per headline, up to a maximum of "
+    "5 bullets — prioritizing anything likely to move Indian equity markets today. "
+    "Ignore and drop any headline that is not relevant to Indian markets, global "
+    "macro, or major asset classes (e.g. sports, crypto trivia, unrelated corporate "
+    "PR), but otherwise include as many of the given headlines as you can, up to 5. "
+    "If none of the headlines are relevant, say 'No market-moving headlines today.' "
+    "Do not invent facts not in the headlines. Do not include numbers not present "
+    "in the source text."
 )
 
 
@@ -36,7 +38,7 @@ def summarize_headlines(
     model: str | None = None,
 ) -> str:
     """
-    Summarize headlines into 3-4 bullets via OpenRouter.
+    Summarize headlines into up to 5 bullets via OpenRouter.
     Falls back to a raw headline listing on any failure, timeout, or empty response —
     this step must never block message delivery.
     """

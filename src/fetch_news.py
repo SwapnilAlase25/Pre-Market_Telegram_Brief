@@ -14,8 +14,8 @@ import requests
 logger = logging.getLogger(__name__)
 
 LOOKBACK_HOURS = 20
-MAX_HEADLINES = 5
-FETCH_COUNT = 12
+MAX_HEADLINES = 7
+FETCH_COUNT = 15
 REQUEST_TIMEOUT = 10
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; PreMarketBrief/1.0)"}
 
